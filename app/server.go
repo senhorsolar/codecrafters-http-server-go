@@ -20,20 +20,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			fmt.Println("Error accepting connection: ", err.Error())
-			os.Exit(1)
-		}
 
-		req := make([]byte, 1024);
-		conn.Read(req);
-		if strings.HasPrefix(string(req), "GET / HTTP/1.1") {
-			fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n\r\n");
-		}
-		else {
-			fmt.Fprintf(conn, "HTTP/1.1 404 Not Found\r\n\r\n");
-		}
+	conn, err := l.Accept()
+	if err != nil {
+		fmt.Println("Error accepting connection: ", err.Error())
+		os.Exit(1)
+	}
+
+	req := make([]byte, 1024);
+	conn.Read(req);
+	if strings.HasPrefix(string(req), "GET / HTTP/1.1") {
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n\r\n");
+	} else {
+		fmt.Fprintf(conn, "HTTP/1.1 404 Not Found\r\n\r\n");
 	}
 }
