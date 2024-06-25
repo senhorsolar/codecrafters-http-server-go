@@ -54,6 +54,14 @@ func handle(conn net.Conn) {
 	case strings.HasPrefix(path, "/echo/"):
 		body := path[strings.LastIndex(path, "/")+1:]
 		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+	case strings.HasPrefix(path, "/user-agent"):
+		for _, part := range parts {
+			if strings.HasPrefix(part, "User-Agent") {
+				body := strings.Split(part, " ")[1]
+				fmt.Printf("Body: %s\n", body)
+				fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+			}
+		}
 	default:
 		fmt.Fprintf(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
 	}
