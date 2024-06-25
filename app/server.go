@@ -21,17 +21,40 @@ func main() {
 	}
 
 
-	conn, err := l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
-	}
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+		}
 
-	req := make([]byte, 1024);
-	conn.Read(req);
-	if strings.HasPrefix(string(req), "GET / HTTP/1.1") {
-		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n\r\n");
-	} else {
-		fmt.Fprintf(conn, "HTTP/1.1 404 Not Found\r\n\r\n");
+		go handle(conn)
+	}
+}
+
+func handle(conn net.Conn) {
+
+	defer conn.Close()
+
+	reqBuf := make([]byte, 1024)
+	n, err := conn.Read(reqBuf)
+	if err != nil {
+		fmt.Println("Error reading request: ", err.Error())
+		return
+	}
+	fmt.Printf("Request: %s\n", reqBuf[:n])
+
+	req := string(reqBuf[:n])
+	parts := strings.Split(req, "\r\n")
+	path := strings.Split(parts[0], " ")[1]
+
+	switch {
+	case path == "/":
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n\r\n")
+	case strings.HasPrefix(path, "/echo/"):
+		body := path[strings.LastIndex(path, "/")+1:]
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+	default:
+		fmt.Fprintf(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
 	}
 }
