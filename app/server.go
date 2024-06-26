@@ -43,12 +43,15 @@ func parseHttpRequest(conn net.Conn) (*HttpRequest, error) {
 	headers := make(map[string]string)
 
 	for _, part := range parts[1:(len(parts)-1)] { // all but first (req) and last (body)
-		kv := strings.Split(part, ": ")
-		if len(kv) < 2 {
-			fmt.Printf("Error splitting %s into key: value pair\n", part)
-			continue
+		line := strings.Trim(part, " ")
+		if len(line) > 0 {
+			kv := strings.Split(part, ": ")
+			if len(kv) < 2 {
+				fmt.Printf("Error splitting %s into key: value pair\n", part)
+				continue
+			}
+			headers[kv[0]] = kv[1]
 		}
-		headers[kv[0]] = kv[1]
 	}
 
 	body := []byte(parts[len(parts)-1])
@@ -96,17 +99,23 @@ func handle(conn net.Conn) {
 		return
 	}
 
-	// req := string(reqBuf[:n])
-	// parts := strings.Split(req, "\r\n")
-	// reqLine := strings.Split(parts[0], " ")
-	// path := reqLine[1];
-
 	switch {
 	case httpRequest.target == "/":
 		okReponse(conn)
 	case strings.HasPrefix(httpRequest.target, "/echo/"):
 		body := strings.TrimPrefix(httpRequest.target, "/echo/")
-		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+		compressed := false
+
+		if val, ok := httpRequest.headers["Accept-Encoding"] {
+			if val == "gzip" {
+				compressed = true
+			}
+		}
+		if compressed {
+			fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+		} else {
+			fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+		}
 	case strings.HasPrefix(httpRequest.target, "/user-agent"):
 		body, ok := httpRequest.headers["User-Agent"]
 		if ok {
@@ -114,16 +123,6 @@ func handle(conn net.Conn) {
 		} else {
 			errorResponse(conn)
 		}
-		// for _, part := range parts {
-		// 	if strings.HasPrefix(part, "User-Agent") {
-		// 		body := strings.Split(part, " ")[1]
-		// 		fmt.Printf("Body: %s\n", body)
-		// 		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
-		// 	}
-		// }
-		// if (ok == false) {
-		// 	errorResponse(conn)
-		// }
 	case strings.HasPrefix(httpRequest.target, "/files/"):
 		if (len(os.Args) < 3 || os.Args[1] != "--directory") {
 			errorResponse(conn)
