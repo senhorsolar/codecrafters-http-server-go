@@ -106,7 +106,8 @@ func handle(conn net.Conn) {
 		body := strings.TrimPrefix(httpRequest.target, "/echo/")
 		compressed := false
 
-		if val, ok := httpRequest.headers["Accept-Encoding"] {
+		val, ok := httpRequest.headers["Accept-Encoding"]
+		if ok {
 			if val == "gzip" {
 				compressed = true
 			}
