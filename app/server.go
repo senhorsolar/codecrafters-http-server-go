@@ -27,6 +27,14 @@ func main() {
 	}
 }
 
+func okReponse(conn net.Conn) {
+	fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n\r\n")
+}
+
+func errorResponse(conn net.Conn) {
+	fmt.Fprintf(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
+}
+
 func handle(conn net.Conn) {
 
 	defer conn.Close()
@@ -35,6 +43,7 @@ func handle(conn net.Conn) {
 	n, err := conn.Read(reqBuf)
 	if err != nil {
 		fmt.Println("Error reading request: ", err.Error())
+		errorResponse(conn)
 		return
 	}
 	fmt.Printf("Request: %s\n", reqBuf[:n])
@@ -45,11 +54,12 @@ func handle(conn net.Conn) {
 
 	switch {
 	case path == "/":
-		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n\r\n")
+		okReponse(conn)
 	case strings.HasPrefix(path, "/echo/"):
 		body := path[strings.LastIndex(path, "/")+1:]
 		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
 	case strings.HasPrefix(path, "/user-agent"):
+		ok := false
 		for _, part := range parts {
 			if strings.HasPrefix(part, "User-Agent") {
 				body := strings.Split(part, " ")[1]
@@ -57,9 +67,12 @@ func handle(conn net.Conn) {
 				fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
 			}
 		}
+		if (ok == false) {
+			errorResponse(conn)
+		}
 	case strings.HasPrefix(path, "/files/"):
 		if (len(os.Args) < 3 || os.Args[1] != "--directory") {
-			fmt.Fprintf(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
+			errorResponse(conn)
 			return;
 		}
 		dir := os.Args[2]
@@ -68,10 +81,11 @@ func handle(conn net.Conn) {
 		body, err := os.ReadFile(filepath.Join(dir, file))
 		if err != nil {
 			fmt.Println ("Error reading file: ", err.Error())
+			errorResponse(conn);
 			return
 		}
 		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
 	default:
-		fmt.Fprintf(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
+		errorResponse(conn)
 	}
 }
