@@ -8,6 +8,29 @@ import (
 	"path/filepath"
 )
 
+type RequestLine struct {
+	method  string
+	target  string
+	version string
+}
+
+type Headers struct {
+	host string
+	port int
+	userAgent string
+	accept string
+	contentType string
+	contentLength int
+}
+
+type HttpRequest struct {
+	request RequestLine
+	headers Headers
+	body string
+}
+
+//func parseHttpRequest()
+
 func main() {
 
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
@@ -50,7 +73,8 @@ func handle(conn net.Conn) {
 
 	req := string(reqBuf[:n])
 	parts := strings.Split(req, "\r\n")
-	path := strings.Split(parts[0], " ")[1]
+	reqLine := strings.Split(parts[0], " ")
+	path := reqLine[1];
 
 	switch {
 	case path == "/":
@@ -76,15 +100,31 @@ func handle(conn net.Conn) {
 			return;
 		}
 		dir := os.Args[2]
-		file := strings.Split(path, "files/")[1]
-		fmt.Printf("file: %s\n", file)
-		body, err := os.ReadFile(filepath.Join(dir, file))
-		if err != nil {
-			fmt.Println ("Error reading file: ", err.Error())
-			errorResponse(conn);
-			return
+
+		fileName := strings.Split(path, "files/")[1]
+		fmt.Printf("file: %s\n", fileName)
+
+		switch {
+		case reqLine[0] == "GET":
+			body, err := os.ReadFile(filepath.Join(dir, fileName))
+			if err != nil {
+				fmt.Println("Error reading file: ", err.Error())
+				errorResponse(conn);
+				return
+			}
+			fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+		case reqLine[0] == "POST":
+			body := parts[len(parts)-1]
+			err := os.WriteFile(filepath.Join(dir, fileName), []byte(body), 0644)
+			if err != nil {
+				fmt.Println("Error creating file: ", err.Error())
+				errorResponse(conn)
+				return
+			}
+			fmt.Fprintf(conn, "HTTP/1.1 201 Created\r\n\r\n")
+		default:
+			errorResponse(conn)
 		}
-		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
 	default:
 		errorResponse(conn)
 	}
