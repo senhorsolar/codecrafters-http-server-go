@@ -108,8 +108,10 @@ func handle(conn net.Conn) {
 
 		val, ok := httpRequest.headers["Accept-Encoding"]
 		if ok {
-			if val == "gzip" {
-				compressed = true
+			for _, encType := range strings.Split(val, ", ") {
+				if encType == "gzip" {
+					compressed = true
+				}
 			}
 		}
 		if compressed {
