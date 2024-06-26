@@ -2,24 +2,19 @@ package main
 
 import (
 	"fmt"
-	// Uncomment this block to pass the first stage
 	"net"
 	"os"
 	"strings"
+	"path/filepath"
 )
 
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
-	fmt.Println("Logs from your program will appear here!")
 
-	// Uncomment this block to pass the first stage
-	//
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		fmt.Println("Failed to bind to port 4221")
 		os.Exit(1)
 	}
-
 
 	for {
 		conn, err := l.Accept()
@@ -62,6 +57,20 @@ func handle(conn net.Conn) {
 				fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
 			}
 		}
+	case strings.HasPrefix(path, "/files/"):
+		if (len(os.Args) < 3 || os.Args[1] != "--directory") {
+			fmt.Fprintf(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
+			return;
+		}
+		dir := os.Args[2]
+		file := strings.Split(path, "files/")[1]
+		fmt.Printf("file: %s\n", file)
+		body, err := os.ReadFile(filepath.Join(dir, file))
+		if err != nil {
+			fmt.Println ("Error reading file: ", err.Error())
+			return
+		}
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
 	default:
 		fmt.Fprintf(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
 	}
