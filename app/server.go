@@ -1,32 +1,59 @@
 package main
 
 import (
+	//"compress/gzip"
+	"errors"
 	"fmt"
+	//"maps"
 	"net"
 	"os"
-	"strings"
 	"path/filepath"
+	"strings"
 )
 
-type RequestLine struct {
+const CLRF = "\r\n"
+
+type HttpRequest struct {
 	method  string
 	target  string
 	version string
+	headers map[string]string
+	body    []byte
 }
 
-type Headers struct {
-	host string
-	port int
-	userAgent string
-	accept string
-	contentType string
-	contentLength int
-}
+func parseHttpRequest(conn net.Conn) (*HttpRequest, error) {
+	reqBuf := make([]byte, 1024)
+	n, err := conn.Read(reqBuf)
+	if err != nil {
+		return nil, err
+	}
 
-type HttpRequest struct {
-	request RequestLine
-	headers Headers
-	body string
+	req := string(reqBuf[:n])
+	parts := strings.Split(req, CLRF)
+
+	reqLine := strings.Split(parts[0], " ")
+
+	if len(reqLine) < 3 {
+		return nil, errors.New("Invalid request line")
+	}
+	method := reqLine[0]
+	target := reqLine[1]
+	version := reqLine[2]
+
+	headers := make(map[string]string)
+
+	for _, part := range parts[1:(len(parts)-1)] { // all but first (req) and last (body)
+		kv := strings.Split(part, ": ")
+		if len(kv) < 2 {
+			fmt.Printf("Error splitting %s into key: value pair\n", part)
+			continue
+		}
+		headers[kv[0]] = kv[1]
+	}
+
+	body := []byte(parts[len(parts)-1])
+
+	return &HttpRequest{method: method, target: target, version: version, headers: headers, body: body}, nil
 }
 
 //func parseHttpRequest()
@@ -62,50 +89,53 @@ func handle(conn net.Conn) {
 
 	defer conn.Close()
 
-	reqBuf := make([]byte, 1024)
-	n, err := conn.Read(reqBuf)
+	httpRequest, err := parseHttpRequest(conn)
 	if err != nil {
-		fmt.Println("Error reading request: ", err.Error())
+		fmt.Println("Error parsing http request: ", err.Error())
 		errorResponse(conn)
 		return
 	}
-	fmt.Printf("Request: %s\n", reqBuf[:n])
 
-	req := string(reqBuf[:n])
-	parts := strings.Split(req, "\r\n")
-	reqLine := strings.Split(parts[0], " ")
-	path := reqLine[1];
+	// req := string(reqBuf[:n])
+	// parts := strings.Split(req, "\r\n")
+	// reqLine := strings.Split(parts[0], " ")
+	// path := reqLine[1];
 
 	switch {
-	case path == "/":
+	case httpRequest.target == "/":
 		okReponse(conn)
-	case strings.HasPrefix(path, "/echo/"):
-		body := path[strings.LastIndex(path, "/")+1:]
+	case strings.HasPrefix(httpRequest.target, "/echo/"):
+		body := strings.TrimPrefix(httpRequest.target, "/echo/")
 		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
-	case strings.HasPrefix(path, "/user-agent"):
-		ok := false
-		for _, part := range parts {
-			if strings.HasPrefix(part, "User-Agent") {
-				body := strings.Split(part, " ")[1]
-				fmt.Printf("Body: %s\n", body)
-				fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
-			}
-		}
-		if (ok == false) {
+	case strings.HasPrefix(httpRequest.target, "/user-agent"):
+		body, ok := httpRequest.headers["User-Agent"]
+		if ok {
+			fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+		} else {
 			errorResponse(conn)
 		}
-	case strings.HasPrefix(path, "/files/"):
+		// for _, part := range parts {
+		// 	if strings.HasPrefix(part, "User-Agent") {
+		// 		body := strings.Split(part, " ")[1]
+		// 		fmt.Printf("Body: %s\n", body)
+		// 		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+		// 	}
+		// }
+		// if (ok == false) {
+		// 	errorResponse(conn)
+		// }
+	case strings.HasPrefix(httpRequest.target, "/files/"):
 		if (len(os.Args) < 3 || os.Args[1] != "--directory") {
 			errorResponse(conn)
 			return;
 		}
 		dir := os.Args[2]
 
-		fileName := strings.Split(path, "files/")[1]
+		fileName := strings.Split(httpRequest.target, "files/")[1]
 		fmt.Printf("file: %s\n", fileName)
 
 		switch {
-		case reqLine[0] == "GET":
+		case httpRequest.method == "GET":
 			body, err := os.ReadFile(filepath.Join(dir, fileName))
 			if err != nil {
 				fmt.Println("Error reading file: ", err.Error())
@@ -113,8 +143,8 @@ func handle(conn net.Conn) {
 				return
 			}
 			fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
-		case reqLine[0] == "POST":
-			body := parts[len(parts)-1]
+		case httpRequest.method == "POST":
+			body := httpRequest.body
 			err := os.WriteFile(filepath.Join(dir, fileName), []byte(body), 0644)
 			if err != nil {
 				fmt.Println("Error creating file: ", err.Error())
