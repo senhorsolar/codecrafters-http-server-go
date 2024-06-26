@@ -1,10 +1,10 @@
 package main
 
 import (
-	//"compress/gzip"
+	"bytes"
+	"compress/gzip"
 	"errors"
 	"fmt"
-	//"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -110,6 +110,11 @@ func handle(conn net.Conn) {
 		if ok {
 			for _, encType := range strings.Split(val, ", ") {
 				if encType == "gzip" {
+					var buf bytes.Buffer
+					w := gzip.NewWriter(&buf)
+					w.Write([]byte(body))
+					w.Close()
+					body = buf.String()
 					compressed = true
 				}
 			}
